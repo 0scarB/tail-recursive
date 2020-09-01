@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "tail_recursion_in_python"
+version = "0.1.0"
+description = ""
+authors = ["0scarB <oscarb@protonmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.dev-dependencies]
+ipython = "^7.18.1"
+pytest = "^6.0.1"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
