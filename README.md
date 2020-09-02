@@ -1,3 +1,5 @@
+![tests](https://github.com/0scarB/tail-recursive/workflows/Test/badge.svg)
+
 Use the `tail_recursive` decorator to simply define tail recursive functions.
 
 If you are encountering **maximum recursion depth errors** or **out-of-memory crashes** tail recursion can be a helpful strategy.
