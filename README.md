@@ -1,4 +1,4 @@
-![tests](https://github.com/0scarB/tail-recursive/workflows/Test/badge.svg)
+![tests](https://github.com/0scarB/tail-recursive/workflows/Tests/badge.svg)
 
 Use the `tail_recursive` decorator to simply define tail recursive functions.
 
