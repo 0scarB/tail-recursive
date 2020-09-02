@@ -1,7 +1,7 @@
 import sys
 import pytest
 
-from . import TailCall, tail_recursive
+from . import tail_recursive
 
 
 def test_factorial_fails_without_tail_recursion():
@@ -23,10 +23,10 @@ def test_factorial_succeeds_with_tail_recursion():
     def factorial(n, accumulator=1):
         if n == 1:
             return accumulator
-        return TailCall(factorial, n - 1, n * accumulator)
+        return factorial.tail_call(n - 1, n * accumulator)
 
     n = sys.getrecursionlimit() + 1
     expected_result = 1
     for i in range(2, n + 1):
         expected_result *= i
-    assert factorial(n) - expected_result == 0
+    assert factorial(n) == expected_result
