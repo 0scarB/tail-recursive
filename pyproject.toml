@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tail-recursive"
-version = "1.0.0"
+version = "1.1.0"
 description = "Tail recursion with a simple decorator api."
 authors = ["0scarB <oscarb@protonmail.com>"]
 license = "MIT"
