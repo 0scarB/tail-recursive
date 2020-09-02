@@ -4,6 +4,15 @@ version = "1.0.0"
 description = "Tail recursion with a simple decorator api."
 authors = ["0scarB <oscarb@protonmail.com>"]
 license = "MIT"
+readme="README.md"
+homepage = "https://github.com/0scarB/tail-recursive"
+repository = "https://github.com/0scarB/tail-recursive"
+documentation = "https://github.com/0scarB/tail-recursive"
+classifiers = [
+    "Topic :: Software Development",
+    "Programming Language :: Python :: 3.8"
+]
+
 
 [tool.poetry.dependencies]
 python = "^3.8"
