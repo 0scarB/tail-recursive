@@ -1,2 +1,6 @@
 __pycache__/
+.mypy_cache/
+.pytest_cache/
+dist/
+*.egg-info/
 poetry.lock
