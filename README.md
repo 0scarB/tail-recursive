@@ -5,6 +5,9 @@ If you are encountering **maximum recursion depth errors** or **out-of-memory cr
 ### Example
 
 ```python
+import tail_recursive from tail_recursive
+
+
 # Pick a larger value if n is below your system's recursion limit.
 x = 5000
 
