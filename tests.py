@@ -4,6 +4,29 @@ import pytest
 from tail_recursive import tail_recursive
 
 
+def test__repr__():
+
+    def func():
+        pass
+
+    decorated_func = tail_recursive(func)
+
+    # Without tail calls.
+    assert repr(decorated_func) == f"tail_recursive(func={repr(func)})"
+
+    # With tail calls.
+    # Without arguments.
+    assert repr(
+        decorated_func.tail_call()
+    ) == f"tail_recursive(func={repr(func)}).tail_call()"
+
+    # With arguments.
+    assert repr(decorated_func.tail_call(
+        "first_arg", 2, [],
+        first_kwarg="1", second_kwarg=2, third_kwarg={},
+    )) == f"tail_recursive(func=" + repr(func) + ").tail_call('first_arg', 2, [], first_kwarg='1', second_kwarg=2, third_kwarg={})"
+
+
 def test_factorial_fails_when_max_recursion_depth_is_reached():
 
     @tail_recursive

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from functools import wraps
+from itertools import chain
 from typing import Any, Callable, Dict, Tuple
 
 
@@ -42,10 +43,24 @@ class tail_recursive:
     func: Callable[..., Any]
     args: Tuple[Any, ...]
     kwargs: Dict[str, Any]
+    has_been_tail_called: bool
 
     def __init__(self, func: Callable[..., Any]):
         """Assigns the ``func`` attribute to the decorated function."""
         self.func = func  # type: ignore
+        self.has_been_tail_called = False
+
+    def __repr__(self) -> str:
+        class_string: str = type(self).__qualname__
+        func_string: str = repr(self.func)
+        object_string: str = f"{class_string}(func={func_string})"
+        if self.has_been_tail_called:
+            args_string = ', '.join(chain(
+                (repr(arg) for arg in self.args),
+                (f"{name}={repr(val)}" for name, val in self.kwargs.items())
+            ))
+            return f"{object_string}.tail_call({args_string})"
+        return object_string
 
     def __call__(self, *args, **kwargs) -> Any:
         @wraps(self.func)
@@ -82,4 +97,5 @@ class tail_recursive:
         """
         self.args = args
         self.kwargs = kwargs
+        self.has_been_tail_called = True
         return self
