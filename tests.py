@@ -273,3 +273,63 @@ def test_multi_function_fibonacci_succeeds_with_nested_tail_call_resolution_enab
 
     n = sys.getrecursionlimit() + 1
     assert fibonacci(n) == non_recursive_fibonacci(n)
+
+
+def test_tail_call_as_part_for_datastructure_is_not_evaluated():
+
+    @tail_recursive
+    def add(a, b):
+        return a + b
+
+    @tail_recursive
+    def getitem(obj, index):
+        return obj[index]
+
+    @tail_recursive
+    def square_and_triangular_numbers(n):
+        square = n**2
+        if n == 1:
+            triangular_number = n
+        else:
+            triangular_number = add.tail_call(
+                n,
+                getitem.tail_call(
+                    square_and_triangular_numbers.tail_call(n - 1),
+                    1
+                )
+            )
+        return square, triangular_number
+
+    assert square_and_triangular_numbers(3) != (9, 6)
+
+
+def test_tail_call_as_part_for_datastructure_with_factory_succeeds():
+
+    @tail_recursive
+    def tuple_factory(*args):
+        return tuple(args)
+
+    @tail_recursive
+    def add(a, b):
+        return a + b
+
+    @tail_recursive
+    def getitem(obj, index):
+        return obj[index]
+
+    @tail_recursive
+    def square_and_triangular_numbers(n):
+        square = n**2
+        if n == 1:
+            triangular_number = n
+        else:
+            triangular_number = add.tail_call(
+                n,
+                getitem.tail_call(
+                    square_and_triangular_numbers.tail_call(n - 1),
+                    1
+                )
+            )
+        return tuple_factory.tail_call(square, triangular_number)
+
+    assert square_and_triangular_numbers(3) == (9, 6)
