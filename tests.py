@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from tail_recursive import tail_recursive, NestedCallMode
+from tail_recursive import tail_recursive, FeatureSet
 
 
 def non_recursive_factorial(n):
@@ -40,28 +40,29 @@ def test__repr__():
 def test_nested_tail_call_mode_raises_exception_for_unknown_mode():
 
     with pytest.raises(ValueError) as excinfo:
-        @tail_recursive(nested_call_mode="not_a_mode")
+        @tail_recursive(feature_set="not_a_feature_set")
         def _():
             pass
 
-    assert "'not_a_mode' is not a valid NestedCallMode" in str(excinfo.value)
+    assert "'not_a_feature_set' is not a valid FeatureSet" in str(
+        excinfo.value)
 
 
 def test_nested_tail_call_mode_converts_string_to_mode():
 
-    @tail_recursive(nested_call_mode="resolve_nested_calls")
+    @tail_recursive(feature_set="full")
     def _():
         pass
 
-    @tail_recursive(nested_call_mode="do_not_resolve_nested_calls")
+    @tail_recursive(feature_set="base")
     def _():
         pass
 
 
 def test_factorial_fails_when_max_recursion_depth_is_reached():
-    for nested_call_mode in (NestedCallMode.RESOLVE_NESTED_CALLS, NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS):
+    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
 
-        @tail_recursive(nested_call_mode=nested_call_mode)
+        @tail_recursive(feature_set=feature_set)
         def factorial(n, accumulator=1):
             if n == 1:
                 return accumulator
@@ -79,9 +80,9 @@ def test_factorial_fails_when_max_recursion_depth_is_reached():
 
 
 def test_factorial_succeeds_with_tail_recursion():
-    for nested_call_mode in (NestedCallMode.RESOLVE_NESTED_CALLS, NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS):
+    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
 
-        @tail_recursive(nested_call_mode=nested_call_mode)
+        @tail_recursive(feature_set=feature_set)
         def factorial(n, accumulator=1):
             if n == 1:
                 return accumulator
@@ -98,9 +99,9 @@ def test_factorial_succeeds_with_tail_recursion():
 
 def test_multithreaded_factorial_succeeds_with_tail_recursion():
     """Test for thread safety."""
-    for nested_call_mode in (NestedCallMode.RESOLVE_NESTED_CALLS, NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS):
+    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
 
-        @tail_recursive(nested_call_mode=nested_call_mode)
+        @tail_recursive(feature_set=feature_set)
         def factorial(n, accumulator=1):
             time.sleep(0.001)
             if n == 1:
@@ -130,7 +131,7 @@ def test_multi_function_factorial_fails_with_nested_tail_call_resolution_disable
     def mul(a, b):
         return a * b
 
-    @tail_recursive(nested_call_mode=NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS)
+    @tail_recursive(feature_set=FeatureSet.BASE)
     def factorial(n):
         if n == 1:
             return n
@@ -146,7 +147,7 @@ def test_multi_function_factorial_succeeds_with_nested_tail_call_resolution_enab
     def mul(a, b):
         return a * b
 
-    @tail_recursive(nested_call_mode=NestedCallMode.RESOLVE_NESTED_CALLS)
+    @tail_recursive(feature_set=FeatureSet.FULL)
     def factorial(n):
         if n == 1:
             return n
@@ -161,11 +162,28 @@ def test_multi_function_factorial_succeeds_with_nested_tail_call_resolution_enab
     assert factorial(n) == non_recursive_factorial(n)
 
 
+def test_factorial_succeeds_with_operator_overloading_of_tail_calls():
+
+    @tail_recursive
+    def factorial(n):
+        if n == 1:
+            return n
+        return n * factorial.tail_call(n - 1)
+
+    assert factorial(1) == non_recursive_factorial(1) == 1
+    assert factorial(3) == non_recursive_factorial(3) == 6
+    assert factorial(4) == non_recursive_factorial(4) == 24
+    assert factorial(6) == non_recursive_factorial(6) == 720
+
+    n = sys.getrecursionlimit() + 100
+    assert factorial(n) == non_recursive_factorial(n)
+
+
 def test_factorial_succeeds_with_lru_cache_and_tail_recursion():
     import functools
 
-    for nested_call_mode in (NestedCallMode.RESOLVE_NESTED_CALLS, NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS):
-        @tail_recursive(nested_call_mode=nested_call_mode)
+    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
+        @tail_recursive(feature_set=feature_set)
         @functools.lru_cache
         def factorial(n, accumulator=1):
             if n == 1:
@@ -192,9 +210,9 @@ def non_recursive_fibonacci(n):
 
 
 def test_fibonacci_fails_when_max_recursion_depth_is_reached():
-    for nested_call_mode in (NestedCallMode.RESOLVE_NESTED_CALLS, NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS):
+    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
 
-        @tail_recursive(nested_call_mode=nested_call_mode)
+        @tail_recursive(feature_set=feature_set)
         def fibonacci(n, a=0, b=1):
             if n == 0:
                 return a
@@ -214,9 +232,9 @@ def test_fibonacci_fails_when_max_recursion_depth_is_reached():
 
 
 def test_fibonacci_succeeds_with_tail_recursion():
-    for nested_call_mode in (NestedCallMode.RESOLVE_NESTED_CALLS, NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS):
+    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
 
-        @tail_recursive(nested_call_mode=nested_call_mode)
+        @tail_recursive(feature_set=feature_set)
         def fibonacci(n, a=0, b=1):
             if n == 0:
                 return a
@@ -240,7 +258,7 @@ def test_multi_function_fibonacci_fails_with_nested_tail_call_resolution_disable
     def add(a, b):
         return a + b
 
-    @tail_recursive(nested_call_mode="do_not_resolve_nested_calls")
+    @tail_recursive(feature_set="base")
     @functools.lru_cache
     def fibonacci(n):
         if n <= 1:
@@ -258,7 +276,7 @@ def test_multi_function_fibonacci_succeeds_with_nested_tail_call_resolution_enab
     def add(a, b):
         return a + b
 
-    @tail_recursive(nested_call_mode="resolve_nested_calls")
+    @tail_recursive(feature_set="full")
     # Requires ``lru_cache`` because this version of fibonacci is highly inefficient.
     @functools.lru_cache
     def fibonacci(n):
@@ -275,15 +293,27 @@ def test_multi_function_fibonacci_succeeds_with_nested_tail_call_resolution_enab
     assert fibonacci(n) == non_recursive_fibonacci(n)
 
 
-def test_tail_call_as_part_for_datastructure_is_not_evaluated():
+def test_fibonacci_succeeds_with_operator_overloading_of_tail_calls():
+    import functools
 
-    @tail_recursive
-    def add(a, b):
-        return a + b
+    @tail_recursive(feature_set="full")
+    # Requires ``lru_cache`` because this version of fibonacci is highly inefficient.
+    @functools.lru_cache
+    def fibonacci(n):
+        if n <= 1:
+            return n
+        return fibonacci.tail_call(n - 1) + fibonacci.tail_call(n - 2)
 
-    @tail_recursive
-    def getitem(obj, index):
-        return obj[index]
+    assert fibonacci(0) == non_recursive_fibonacci(0) == 0
+    assert fibonacci(1) == non_recursive_fibonacci(1) == 1
+    assert fibonacci(4) == non_recursive_fibonacci(4) == 3
+    assert fibonacci(7) == non_recursive_fibonacci(7) == 13
+
+    n = sys.getrecursionlimit() + 1
+    assert fibonacci(n) == non_recursive_fibonacci(n)
+
+
+def test_tail_call_as_part_for_datastructure_fails():
 
     @tail_recursive
     def square_and_triangular_numbers(n):
@@ -291,16 +321,16 @@ def test_tail_call_as_part_for_datastructure_is_not_evaluated():
         if n == 1:
             triangular_number = n
         else:
-            triangular_number = add.tail_call(
-                n,
-                getitem.tail_call(
-                    square_and_triangular_numbers.tail_call(n - 1),
-                    1
-                )
-            )
+            triangular_number = n + \
+                square_and_triangular_numbers.tail_call(
+                    n - 1
+                )[1]
         return square, triangular_number
 
-    assert square_and_triangular_numbers(3) != (9, 6)
+    try:
+        assert square_and_triangular_numbers(3) != (9, 6)
+    except:
+        pass
 
 
 def test_tail_call_as_part_for_datastructure_with_factory_succeeds():
@@ -310,26 +340,36 @@ def test_tail_call_as_part_for_datastructure_with_factory_succeeds():
         return tuple(args)
 
     @tail_recursive
-    def add(a, b):
-        return a + b
-
-    @tail_recursive
-    def getitem(obj, index):
-        return obj[index]
-
-    @tail_recursive
     def square_and_triangular_numbers(n):
         square = n**2
         if n == 1:
             triangular_number = n
         else:
-            triangular_number = add.tail_call(
-                n,
-                getitem.tail_call(
-                    square_and_triangular_numbers.tail_call(n - 1),
-                    1
-                )
-            )
+            triangular_number = n + square_and_triangular_numbers.tail_call(
+                n - 1
+            )[1]
         return tuple_factory.tail_call(square, triangular_number)
 
     assert square_and_triangular_numbers(3) == (9, 6)
+
+
+def test_tail_call_with_dataclass_succeeds():
+    from dataclasses import dataclass
+
+    @ tail_recursive
+    @ dataclass
+    class SquareAndTriangularNumber:
+        square: int
+        triangular: int = 1
+
+    @ tail_recursive(feature_set="full")
+    def square_and_triangular_numbers(n):
+        square_and_triangular_number = SquareAndTriangularNumber.tail_call(
+            square=n**2,
+            triangular=1 if n == 1
+            else n + square_and_triangular_numbers.tail_call(n - 1).triangular
+        )
+        return square_and_triangular_number
+
+    assert square_and_triangular_numbers(3).square == 9
+    assert square_and_triangular_numbers(3).triangular == 6

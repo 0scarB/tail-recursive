@@ -7,51 +7,136 @@ Example::
     import sys
     from tail_recursive import tail_recursive
 
-
-    @tail_recursive
-    def mul(a, b):
-        return a * b
-
     @tail_recursive
     def factorial(n):
         if n == 1:
             return n
-        # Nested tail calls are supported by default.
-        return mul.tail_call(n, factorial.tail_call(n - 1))
+        # Overloading of dunder methods such as __mul__ and __rmul__ are
+        # supported by default.
+        return n * factorial.tail_call(n - 1)
 
-    
+
     # Calls to tail recursive functions will not exceed the maximum recursion
     # depth, because functions are called sequentially.
     factorial(sys.getrecursionlimit() + 1)
 """
 
 import abc
+import dataclasses
 from dataclasses import dataclass
 import enum
 import functools
 import itertools
+import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
+
+
+# Dunder methods from https://docs.python.org/3/reference/datamodel.html.
+_NUMERIC_DUNDER_METH_BASE_NAMES: List[str] = [
+    "add",
+    "sub",
+    "mul",
+    "matmul",
+    "truediv",
+    "floordiv",
+    "mod",
+    "divmod",
+    "pow",
+    "lshift",
+    "rshift",
+    "and",
+    "xor",
+    "or",
+]
+
+_NUMERIC_DUNDER_METH_NAMES: List[str] = _NUMERIC_DUNDER_METH_BASE_NAMES + [
+    f"r{name}" for name in _NUMERIC_DUNDER_METH_BASE_NAMES
+] + [
+    f"i{name}" for name in _NUMERIC_DUNDER_METH_BASE_NAMES
+] + [
+    "neg",
+    "pos",
+    "abs",
+    "invert",
+    "complex",
+    "int",
+    "float",
+    "index",
+    "round",
+    "trunc",
+    "floor",
+    "ciel"
+]
+
+_DUNDER_METH_NAMES: List[str] = [
+    # Cannot be overridden because they will break functionality:
+    # "new",
+    # "init",
+    # "del",
+    # "getattribute",
+    # "get",
+    # "set",
+    # "delete",
+    # "set_name",
+    # "init_subclass",
+    # "prepare",
+    # "hash",
+    # "bool",
+    # "instancecheck",
+    # "subclasscheck",
+    # "class_getitem",
+    # "call",
+    #
+    # getattr, setattr and delattr have custom overrides (see below).
+    "repr",
+    "str",
+    "bytes",
+    "format",
+    "lt",
+    "le",
+    "eq",
+    "ne",
+    "gt",
+    "ge",
+    "dir",
+    "len",
+    "length_hint",
+    "getitem",
+    "setitem",
+    "delitem",
+    "missing",
+    "iter",
+    "reversed",
+    "contains",
+    "enter",
+    "exit",
+    "await",
+    "aiter",
+    "anext",
+    "aenter",
+    "aexit",
+] + _NUMERIC_DUNDER_METH_NAMES
 
 
 @dataclass
 class _FuncStore:
-    func: Callable[..., Any]
+    _func: Callable[..., Any]
 
     @property
     def _func_repr(self) -> str:
-        return repr(self.func)
+        return repr(self._func)
 
 
 @dataclass
 class _ArgsAndKwargsStore:
-    args: List[Any]
-    kwargs: Dict[str, Any]
+    _args: List[Any]
+    _kwargs: Dict[str, Any]
 
     @property
     def _args_and_kwargs_string(self) -> str:
         return ', '.join(itertools.chain(
-            (repr(arg) for arg in self.args),
-            (f"{name}={repr(val)}" for name, val in self.kwargs.items())
+            (repr(arg) for arg in self._args),
+            (f"{name}={repr(val)}" for name, val in self._kwargs.items())
         ))
 
 
@@ -64,28 +149,28 @@ class _IndexedArgsAndKwargsAccess:
 
     def __init__(self, _accessing_object: _ArgsAndKwargsStore):
         self._accessing_object = _accessing_object
-        self._last_arg_index = len(self._accessing_object.args) - 1
+        self._last_arg_index = len(self._accessing_object._args) - 1
         self.length = (
             self._last_arg_index
-            + len(self._accessing_object.kwargs) + 1
+            + len(self._accessing_object._kwargs) + 1
         )
         self._kwargs_index_key_map = {
             index: key for index, key in zip(
                 range(self._last_arg_index + 1, self.length),
-                self._accessing_object.kwargs.keys()
+                self._accessing_object._kwargs.keys()
             )
         }
 
     def get(self, index: int) -> Any:
         if index > self._last_arg_index:
-            return self._accessing_object.kwargs[self._kwargs_index_key_map[index]]
-        return self._accessing_object.args[index]
+            return self._accessing_object._kwargs[self._kwargs_index_key_map[index]]
+        return self._accessing_object._args[index]
 
     def set(self, index: int, val: Any) -> None:
         if index > self._last_arg_index:
-            self._accessing_object.kwargs[self._kwargs_index_key_map[index]] = val
+            self._accessing_object._kwargs[self._kwargs_index_key_map[index]] = val
         else:
-            self._accessing_object.args[index] = val
+            self._accessing_object._args[index] = val
 
 
 # Mypy doesn't currently allow abstract dataclasses (see https://github.com/python/mypy/issues/5374).
@@ -93,28 +178,25 @@ class _IndexedArgsAndKwargsAccess:
 class TailCall(abc.ABC, _FuncStore, _ArgsAndKwargsStore):
     """Stores information necessary to lazily execute a function in the future."""
 
-    def __repr__(self) -> str:
-        return f"{tail_recursive(self.func)}.tail_call({self._args_and_kwargs_string})"
-
     @ abc.abstractmethod
-    def resolve(self):
+    def _resolve(self):
         """Lazily and sequentially evaluates recursive tail calls while maintaining same size of callstack."""
         ...
 
 
-class TailCallWithoutNestedCallResolution(TailCall):
+class TailCallWithoutNestedCallResolutionAndDunderOverloads(TailCall):
 
-    def resolve(self):
-        resolution_value = self.func(*self.args, **self.kwargs)
+    def _resolve(self):
+        resolution_value = self._func(*self._args, **self._kwargs)
         while isinstance(resolution_value, TailCall):
-            resolution_value = self.func(
-                *resolution_value.args,
-                **resolution_value.kwargs
+            resolution_value = self._func(
+                *resolution_value._args,
+                **resolution_value._kwargs
             )
         return resolution_value
 
 
-@dataclass(init=False)
+@ dataclass(init=False)
 class _TailCallStackItem:
     tail_call: TailCall
     indexed_args_and_kwargs: _IndexedArgsAndKwargsAccess
@@ -126,7 +208,7 @@ class _TailCallStackItem:
         self.resolving_arg_or_kwarg_with_index = None
 
 
-@dataclass(init=False)
+@ dataclass(init=False)
 class _TailCallStack:
     stack: List[_TailCallStackItem]
     length: int
@@ -135,7 +217,7 @@ class _TailCallStack:
         self.stack = [_TailCallStackItem(initial_item)]
         self.length = 1
 
-    @property
+    @ property
     def last_item(self):
         return self.stack[-1]
 
@@ -146,9 +228,9 @@ class _TailCallStack:
     def pop_item_resolution(self):
         tail_call_with_fully_resolved_args_and_kwargs = self.stack.pop().tail_call
         self.length -= 1
-        return tail_call_with_fully_resolved_args_and_kwargs.func(
-            *tail_call_with_fully_resolved_args_and_kwargs.args,
-            **tail_call_with_fully_resolved_args_and_kwargs.kwargs
+        return tail_call_with_fully_resolved_args_and_kwargs._func(
+            *tail_call_with_fully_resolved_args_and_kwargs._args,
+            **tail_call_with_fully_resolved_args_and_kwargs._kwargs
         )
 
     def set_arg_or_kwarg_of_last_item_to_resolution(self, resolution: Any):
@@ -158,16 +240,62 @@ class _TailCallStack:
         )
 
 
-class TailCallWithNestedCallResolution(TailCall):
+class TailCallWithNestedCallResolutionAndDunderOverloads(TailCall):
 
-    def __init__(self, func: Callable[..., Any], args: List[Any], kwargs: Dict[str, Any]):
+    @staticmethod
+    def _tail_call_dunder_meth_factory(dunder_meth_name: str):
+
+        def dunder_meth(self, *args, **kwargs):
+            tail_call_class = type(self)
+            return tail_call_class(
+                _func=lambda self, *args, **kwargs:
+                getattr(self, dunder_meth_name)(*args, **kwargs),
+                _args=[self] + list(args),
+                _kwargs=kwargs
+            )
+
+        return dunder_meth
+
+    def __new__(cls, *args, **kwargs):
+        for dunder_meth_name_without_underscores in _DUNDER_METH_NAMES:
+            dunder_meth_name = f"__{dunder_meth_name_without_underscores}__"
+
+            setattr(cls, dunder_meth_name, cls._tail_call_dunder_meth_factory(
+                dunder_meth_name
+            ))
+        return super().__new__(cls)
+
+    def __init__(self, _func: Callable[..., Any], _args: List[Any], _kwargs: Dict[str, Any]):
         # ``setattr`` stops mypy complaining.
         # Seems to be related to this issue https://github.com/python/mypy/issues/2427.
-        setattr(self, "func", func)
-        self.args = args
-        self.kwargs = kwargs
+        setattr(self, "_func", _func)
+        self._args = _args
+        self._kwargs = _kwargs
 
-    def resolve(self):
+    def _post_init_setattr(self, name, value):
+        return type(self)(
+            _func=lambda self, name, value: object.__setattr__(
+                self, name, value
+            ),
+            _args=[self, name, value], _kwargs={}
+        )
+
+    def __post_init__(self):
+        self.__setattr__ = self._post_init_setattr
+
+    def __getattr__(self, name):
+        return type(self)(
+            _func=lambda self, name: getattr(self, name),
+            _args=[self, name], _kwargs={}
+        )
+
+    def __delattr__(self, name):
+        return type(self)(
+            _func=lambda self, name: delattr(self, name),
+            _args=[self, name], _kwargs={}
+        )
+
+    def _resolve(self):
         tail_call_stack = _TailCallStack(initial_item=self)
         while True:
             if tail_call_stack.last_item.resolving_arg_or_kwarg_with_index is None:
@@ -195,40 +323,40 @@ class TailCallWithNestedCallResolution(TailCall):
                     return resolution
 
 
-@enum.unique
-class NestedCallMode(enum.Enum):
+@ enum.unique
+class FeatureSet(enum.Enum):
     """Different ways of resolving nested tail calls."""
 
-    DO_NOT_RESOLVE_NESTED_CALLS: str = "do_not_resolve_nested_calls"
-    RESOLVE_NESTED_CALLS: str = "resolve_nested_calls"
+    BASE: str = "base"
+    FULL: str = "full"
 
 
-NESTED_CALL_MODE_TAILCALL_SUBCLASS_MAP: Dict[NestedCallMode, Type[TailCall]] = {
-    NestedCallMode.DO_NOT_RESOLVE_NESTED_CALLS: TailCallWithoutNestedCallResolution,
-    NestedCallMode.RESOLVE_NESTED_CALLS: TailCallWithNestedCallResolution,
+FEATURE_SET_TAILCALL_SUBCLASS_MAP: Dict[FeatureSet, Type[TailCall]] = {
+    FeatureSet.BASE: TailCallWithoutNestedCallResolutionAndDunderOverloads,
+    FeatureSet.FULL: TailCallWithNestedCallResolutionAndDunderOverloads,
 }
 
 
-@dataclass(init=False)
+@ dataclass(init=False)
 class TailCallable(_FuncStore):
 
-    nested_call_mode: NestedCallMode
+    feature_set: FeatureSet
 
-    def __init__(self, func: Callable[..., Any], *, nested_call_mode: Union[NestedCallMode, str] = NestedCallMode.RESOLVE_NESTED_CALLS):
-        functools.update_wrapper(self, func)
+    def __init__(self, _func: Callable[..., Any], *, feature_set: Union[FeatureSet, str] = FeatureSet.FULL):
+        functools.update_wrapper(self, _func)
         # ``setattr`` stops mypy complaining.
         # Seems to be related to this issue https://github.com/python/mypy/issues/2427.
-        setattr(self, "func", func)
-        if isinstance(nested_call_mode, NestedCallMode):
-            self.nested_call_mode = nested_call_mode
+        setattr(self, "_func", _func)
+        if isinstance(feature_set, FeatureSet):
+            self.feature_set = feature_set
         else:
-            self.nested_call_mode = NestedCallMode(nested_call_mode)
+            self.feature_set = FeatureSet(feature_set)
 
     def __repr__(self) -> str:
         return f"{tail_recursive.__qualname__}(func={self._func_repr})"
 
     def __call__(self, *args, **kwargs) -> Any:
-        return self.tail_call(*args, **kwargs).resolve()
+        return self.tail_call(*args, **kwargs)._resolve()
 
     def tail_call(self, *args, **kwargs) -> TailCall:
         """Passes arguments to a tail recursive function so that it may lazily called.
@@ -242,46 +370,48 @@ class TailCallable(_FuncStore):
             def f():
                 return tail_recursive_function.tail_call(...)
         """
-        return NESTED_CALL_MODE_TAILCALL_SUBCLASS_MAP[self.nested_call_mode](func=self.func, args=list(args), kwargs=kwargs)
+        return FEATURE_SET_TAILCALL_SUBCLASS_MAP[self.feature_set](_func=self._func, _args=list(args), _kwargs=kwargs)
 
 
-def tail_recursive(_func=None, *, nested_call_mode=NestedCallMode.RESOLVE_NESTED_CALLS):
+def tail_recursive(
+    _func: Optional[Callable[..., Any]] = None,
+    *,
+    feature_set: Union[FeatureSet, str] = FeatureSet.FULL
+):
     """A decorator that gives your functions the ability to be tail recursive.
 
     Args:
-        nested_call_mode: Defines the way in which nested calls are resolved.
+        feature_set: Defines the feature set available when working with tail calls.
+            If the feature set is set to ``"full"`` or ``FeatureSet.FULL`` then
+            nested tail calls (i.e. ``<function>.tail_call([..., ]<function>.tail_call(...)[, ...])``)
+            and dunder overrides (e.g. ``<function>.tail_call(...).<attribute> + <function>.tail_call(...)[<index>]``)
+            are supported.
+            If the feature set is set to ``"base"`` or ``FeatureSet.FULL`` then the aforementioned
+            is not supported.
 
     Example::
 
-        # Pick a larger value if n is below your system's recursion limit.
-        x = 5000
-
-        def factorial_without_tail_recursion(n, accumulator=1):
-            if n == 1:
-                return accumulator
-            return factorial_without_tail_recursion(n - 1, n * accumulator)
-
-        try:
-            # This will exceed the maximum recursion depth.
-            factorial_without_tail_recursion(x)
-        except RecursionError:
-            pass
+        import sys
+        from tail_recursive import tail_recursive
 
         @tail_recursive
-        def factorial(n, accumulator=1):
+        def factorial(n):
             if n == 1:
-                return accumulator
-            return factorial.tail_call(n - 1, n * accumulator)
+                return n
+            # Overloading of dunder methods such as __mul__ and __rmul__ are
+            # supported by default.
+            return n * factorial.tail_call(n - 1)
 
-        # Implementation with tail recursion succeeds because the function is
-        # called sequentially under the hood.
-        factorial(x)
+
+        # Calls to tail recursive functions will not exceed the maximum recursion
+        # depth, because functions are called sequentially.
+        factorial(sys.getrecursionlimit() + 1)
 
     Methods:
         tail_call(*args, **kwargs)
     """
     def decorator(func):
-        return TailCallable(func, nested_call_mode=nested_call_mode)
+        return TailCallable(func, feature_set=feature_set)
 
     if _func is None:
         return decorator
