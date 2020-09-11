@@ -21,20 +21,27 @@ def test__repr__():
 
     decorated_func = tail_recursive(func)
 
-    # Without tail calls.
     assert repr(decorated_func) == f"tail_recursive(func={repr(func)})"
 
-    # With tail calls.
+
+def test_to_string():
+
+    def func():
+        pass
+
+    decorated_func = tail_recursive(func)
+
     # Without arguments.
-    assert repr(
-        decorated_func.tail_call()
-    ) == f"tail_recursive(func={repr(func)}).tail_call()"
+    assert (
+        decorated_func.tail_call()._to_string()
+        == f"tail_recursive(func={repr(func)}).tail_call()"
+    )
 
     # With arguments.
-    assert repr(decorated_func.tail_call(
+    assert decorated_func.tail_call(
         "first_arg", 2, [],
         first_kwarg="1", second_kwarg=2, third_kwarg={},
-    )) == f"tail_recursive(func=" + repr(func) + ").tail_call('first_arg', 2, [], first_kwarg='1', second_kwarg=2, third_kwarg={})"
+    )._to_string() == f"tail_recursive(func=" + repr(func) + ").tail_call('first_arg', 2, [], first_kwarg='1', second_kwarg=2, third_kwarg={})"
 
 
 def test_nested_tail_call_mode_raises_exception_for_unknown_mode():

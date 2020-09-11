@@ -178,6 +178,9 @@ class _IndexedArgsAndKwargsAccess:
 class TailCall(abc.ABC, _FuncStore, _ArgsAndKwargsStore):
     """Stores information necessary to lazily execute a function in the future."""
 
+    def _to_string(self) -> str:
+        return f"{tail_recursive(self._func)}.tail_call({self._args_and_kwargs_string})"
+
     @ abc.abstractmethod
     def _resolve(self):
         """Lazily and sequentially evaluates recursive tail calls while maintaining same size of callstack."""
