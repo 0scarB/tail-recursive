@@ -74,6 +74,7 @@ _DUNDER_METH_NAMES: List[str] = [
     # "init",
     # "del",
     # "getattribute",
+    # "setattr",
     # "get",
     # "set",
     # "delete",
@@ -87,7 +88,7 @@ _DUNDER_METH_NAMES: List[str] = [
     # "class_getitem",
     # "call",
     #
-    # getattr, setattr and delattr have custom overrides (see below).
+    # getattr and delattr have custom overrides (see below).
     "repr",
     "str",
     "bytes",
@@ -243,6 +244,7 @@ class _TailCallStack:
         )
 
 
+@dataclass
 class TailCallWithNestedCallResolutionAndDunderOverloads(TailCall):
 
     @staticmethod
@@ -274,17 +276,6 @@ class TailCallWithNestedCallResolutionAndDunderOverloads(TailCall):
         setattr(self, "_func", _func)
         self._args = _args
         self._kwargs = _kwargs
-
-    def _post_init_setattr(self, name, value):
-        return type(self)(
-            _func=lambda self, name, value: object.__setattr__(
-                self, name, value
-            ),
-            _args=[self, name, value], _kwargs={}
-        )
-
-    def __post_init__(self):
-        self.__setattr__ = self._post_init_setattr
 
     def __getattr__(self, name):
         return type(self)(
