@@ -44,7 +44,7 @@ def test_to_string():
     )._to_string() == f"tail_recursive(func=" + repr(func) + ").tail_call('first_arg', 2, [], first_kwarg='1', second_kwarg=2, third_kwarg={})"
 
 
-def test_nested_tail_call_mode_raises_exception_for_unknown_mode():
+def test_nested_tail_call_mode_raises_exception_for_unknown_feature_set():
 
     with pytest.raises(ValueError) as excinfo:
         @tail_recursive(feature_set="not_a_feature_set")
@@ -55,7 +55,7 @@ def test_nested_tail_call_mode_raises_exception_for_unknown_mode():
         excinfo.value)
 
 
-def test_nested_tail_call_mode_converts_string_to_mode():
+def test_nested_tail_call_mode_converts_string_to_feature_set():
 
     @tail_recursive(feature_set="full")
     def _():
@@ -380,3 +380,33 @@ def test_tail_call_with_dataclass_succeeds():
 
     assert square_and_triangular_numbers(3).square == 9
     assert square_and_triangular_numbers(3).triangular == 6
+
+
+def test_class_property():
+    import functools
+
+    class MathStuff:
+
+        def __init__(self, n):
+            self.n = n
+
+        @tail_recursive(feature_set="full")
+        # Requires ``lru_cache`` because this version of fibonacci is highly inefficient.
+        @functools.lru_cache
+        def fibonacci(self, n):
+            if n <= 1:
+                return n
+            return self.fibonacci.tail_call(self, n - 1) + self.fibonacci.tail_call(self, n - 2)
+
+        @property
+        @tail_recursive
+        def fib_of_n(self):
+            return self.fibonacci.tail_call(self, self.n)
+
+    assert MathStuff(0).fib_of_n == non_recursive_fibonacci(0) == 0
+    assert MathStuff(1).fib_of_n == non_recursive_fibonacci(1) == 1
+    assert MathStuff(4).fib_of_n == non_recursive_fibonacci(4) == 3
+    assert MathStuff(7).fib_of_n == non_recursive_fibonacci(7) == 13
+
+    n = sys.getrecursionlimit() + 1
+    assert MathStuff(n).fib_of_n == non_recursive_fibonacci(n)
