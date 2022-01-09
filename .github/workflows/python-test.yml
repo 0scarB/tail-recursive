@@ -18,4 +18,4 @@ jobs:
           pip install poetry
           poetry install
       - name: Test
-        run: poetry run pytest tests.py --timeout=1
+        run: poetry run pytest tests.py --timeout=3
