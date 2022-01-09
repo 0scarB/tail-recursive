@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import concurrent.futures
 import sys
 import time
@@ -467,31 +468,37 @@ def test_reverse_succeeds_with_operator_overloading():
         start, *middle, end = lst
         return [end] + reverse.tail_call(middle) + [start]
 
-    for n, expect_non_tail_recursive_fails_with_err in (
-            (10, None),
-            (sys.getrecursionlimit() - 1, RecursionError),
-    ):
-        lst = list(range(n))
-        expected_result = list(reversed(lst))
+    with set_max_recursion_depth(100):
+        for n, expect_non_tail_recursive_fails_with_err in (
+                (10, None),
+                (1000, RecursionError),
+        ):
+            lst = list(range(n))
+            expected_result = list(reversed(lst))
 
-        try:
-            assert non_tail_recursive_reverse(lst) == expected_result, \
-                f"{non_tail_recursive_reverse.__doc__} is incorrect"
+            try:
+                print(expect_non_tail_recursive_fails_with_err)
+                assert non_tail_recursive_reverse(lst) == expected_result, \
+                    f"{non_tail_recursive_reverse.__doc__} is incorrect"
 
-            if expect_non_tail_recursive_fails_with_err is not None:
-                pytest.fail(
-                    f"{non_tail_recursive_reverse.__doc__} was expected to fail "
-                    f"with error '{expect_non_tail_recursive_fails_with_err.__qualname__}'"
-                )
-        except (
-                Exception if expect_non_tail_recursive_fails_with_err is None
-                else expect_non_tail_recursive_fails_with_err
-        ) as err:
-            if expect_non_tail_recursive_fails_with_err is None \
-                    or not isinstance(err, type(expect_non_tail_recursive_fails_with_err)):
-                pytest.fail(f"{non_tail_recursive_reverse.__doc__} failed with error {err}")
+                if expect_non_tail_recursive_fails_with_err is not None:
+                    pytest.fail(
+                        f"{non_tail_recursive_reverse.__doc__} was expected to fail "
+                        f"with error '{expect_non_tail_recursive_fails_with_err.__qualname__}'"
+                    )
+            except Exception as err:
+                if not isinstance(err, expect_non_tail_recursive_fails_with_err):
+                    pytest.fail(f"{non_tail_recursive_reverse.__doc__} unexpectedly failed with error {err}")
 
-        try:
-            assert reverse(lst) == expected_result, f"{reverse.__doc__} is incorrect"
-        except Exception as err:
-            pytest.fail(f"{reverse.__doc__} failed with error {err}")
+            try:
+                assert reverse(lst) == expected_result, f"{reverse.__doc__} is incorrect"
+            except Exception as err:
+                pytest.fail(f"{reverse.__doc__} failed with error {err}")
+
+
+@contextmanager
+def set_max_recursion_depth(depth):
+    original_depth = sys.getrecursionlimit()
+    sys.setrecursionlimit(depth)
+    yield
+    sys.setrecursionlimit(original_depth)

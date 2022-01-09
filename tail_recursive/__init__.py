@@ -26,9 +26,7 @@ from dataclasses import dataclass
 import enum
 import functools
 import itertools
-import types
-from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
-
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 # Dunder methods from https://docs.python.org/3/reference/datamodel.html.
 _NUMERIC_DUNDER_METH_BASE_NAMES: List[str] = [
@@ -48,74 +46,83 @@ _NUMERIC_DUNDER_METH_BASE_NAMES: List[str] = [
     "or",
 ]
 
-_NUMERIC_DUNDER_METH_NAMES: List[str] = _NUMERIC_DUNDER_METH_BASE_NAMES + [
+_NUMERIC_RIGHT_DUNDER_METH_NAMES: List[str] = [
     f"r{name}" for name in _NUMERIC_DUNDER_METH_BASE_NAMES
-] + [
-    f"i{name}" for name in _NUMERIC_DUNDER_METH_BASE_NAMES
-] + [
-    "neg",
-    "pos",
-    "abs",
-    "invert",
-    "complex",
-    "int",
-    "float",
-    "index",
-    "round",
-    "trunc",
-    "floor",
-    "ciel"
 ]
+_NUMERIC_RIGHT_DUNDER_METH_NAMES_SET_WITH_UNDERSCORES = {
+    f"__{meth_name}__" for meth_name in _NUMERIC_RIGHT_DUNDER_METH_NAMES
+}
 
-_DUNDER_METH_NAMES: List[str] = [
-    # Cannot be overridden because they will break functionality:
-    # "new",
-    # "init",
-    # "del",
-    # "getattribute",
-    # "setattr",
-    # "get",
-    # "set",
-    # "delete",
-    # "set_name",
-    # "init_subclass",
-    # "prepare",
-    #
-    # getattr and delattr have custom overrides (see below).
-    "repr",
-    "str",
-    "bytes",
-    "format",
-    "lt",
-    "le",
-    "eq",
-    "ne",
-    "gt",
-    "ge",
-    "hash",
-    "bool",
-    "dir",
-    "instancecheck",
-    "subclasscheck",
-    "class_getitem",
-    "call",
-    "len",
-    "length_hint",
-    "getitem",
-    "setitem",
-    "delitem",
-    "missing",
-    "iter",
-    "reversed",
-    "contains",
-    "enter",
-    "exit",
-    "await",
-    "aiter",
-    "anext",
-    "aenter",
-    "aexit",
-] + _NUMERIC_DUNDER_METH_NAMES
+_NUMERIC_DUNDER_METH_NAMES: List[str] = \
+    _NUMERIC_DUNDER_METH_BASE_NAMES \
+    + _NUMERIC_RIGHT_DUNDER_METH_NAMES \
+    + [f"i{name}" for name in _NUMERIC_DUNDER_METH_BASE_NAMES] \
+    + [
+        "neg",
+        "pos",
+        "abs",
+        "invert",
+        "complex",
+        "int",
+        "float",
+        "index",
+        "round",
+        "trunc",
+        "floor",
+        "ciel"
+    ]
+
+_DUNDER_METH_NAMES: List[str] = \
+    [
+        # Cannot be overridden because they will break functionality:
+        # "new",
+        # "init",
+        # "del",
+        # "getattribute",
+        # "setattr",
+        # "get",
+        # "set",
+        # "delete",
+        # "set_name",
+        # "init_subclass",
+        # "prepare",
+        #
+        # getattr and delattr have custom overrides (see below).
+        "repr",
+        "str",
+        "bytes",
+        "format",
+        "lt",
+        "le",
+        "eq",
+        "ne",
+        "gt",
+        "ge",
+        "hash",
+        "bool",
+        "dir",
+        "instancecheck",
+        "subclasscheck",
+        "class_getitem",
+        "call",
+        "len",
+        "length_hint",
+        "getitem",
+        "setitem",
+        "delitem",
+        "missing",
+        "iter",
+        "reversed",
+        "contains",
+        "enter",
+        "exit",
+        "await",
+        "aiter",
+        "anext",
+        "aenter",
+        "aexit",
+    ] \
+    + _NUMERIC_DUNDER_METH_NAMES
 
 
 @dataclass
@@ -151,8 +158,8 @@ class _IndexedArgsAndKwargsAccess:
         self._accessing_object = _accessing_object
         self._last_arg_index = len(self._accessing_object._args) - 1
         self.length = (
-            self._last_arg_index
-            + len(self._accessing_object._kwargs) + 1
+                self._last_arg_index
+                + len(self._accessing_object._kwargs) + 1
         )
         self._kwargs_index_key_map = {
             index: key for index, key in zip(
@@ -181,7 +188,7 @@ class TailCall(abc.ABC, _FuncStore, _ArgsAndKwargsStore):
     def _to_string(self) -> str:
         return f"{tail_recursive(self._func)}.tail_call({self._args_and_kwargs_string})"
 
-    @ abc.abstractmethod
+    @abc.abstractmethod
     def _resolve(self):
         """Lazily and sequentially evaluates recursive tail calls while maintaining same size of callstack."""
         ...
@@ -199,7 +206,7 @@ class TailCallWithoutNestedCallResolutionAndDunderOverloads(TailCall):
         return resolution_value
 
 
-@ dataclass(init=False)
+@dataclass(init=False)
 class _TailCallStackItem:
     tail_call: TailCall
     indexed_args_and_kwargs: _IndexedArgsAndKwargsAccess
@@ -211,7 +218,7 @@ class _TailCallStackItem:
         self.resolving_arg_or_kwarg_with_index = None
 
 
-@ dataclass(init=False)
+@dataclass(init=False)
 class _TailCallStack:
     stack: List[_TailCallStackItem]
     length: int
@@ -220,7 +227,7 @@ class _TailCallStack:
         self.stack = [_TailCallStackItem(initial_item)]
         self.length = 1
 
-    @ property
+    @property
     def last_item(self):
         return self.stack[-1]
 
@@ -249,11 +256,22 @@ class TailCallWithNestedCallResolutionAndDunderOverloads(TailCall):
     @staticmethod
     def _tail_call_dunder_meth_factory(dunder_meth_name: str):
 
+        # If <self>.__r<operation>__(other) does not exist, try <other>.__<operation>__(self)
+        if dunder_meth_name in _NUMERIC_RIGHT_DUNDER_METH_NAMES_SET_WITH_UNDERSCORES:
+            def func(self, other, *args, **kwargs) -> Any:
+                try:
+                    return getattr(self, dunder_meth_name)(other, *args, **kwargs)
+                except AttributeError:
+                    return getattr(other, f"__{dunder_meth_name[3:]}")(self, *args, **kwargs)
+        else:
+            # Ignore differing parameter signatures
+            def func(self, *args, **kwargs) -> Any:  # type: ignore[misc]
+                return getattr(self, dunder_meth_name)(*args, **kwargs)
+
         def dunder_meth(self, *args, **kwargs):
             tail_call_class = type(self)
             return tail_call_class(
-                _func=lambda self, *args, **kwargs:
-                getattr(self, dunder_meth_name)(*args, **kwargs),
+                _func=func,
                 _args=[self] + list(args),
                 _kwargs=kwargs
             )
@@ -316,7 +334,7 @@ class TailCallWithNestedCallResolutionAndDunderOverloads(TailCall):
                     return resolution
 
 
-@ enum.unique
+@enum.unique
 class FeatureSet(enum.Enum):
     """Different ways of resolving nested tail calls."""
 
@@ -330,9 +348,8 @@ FEATURE_SET_TAILCALL_SUBCLASS_MAP: Dict[FeatureSet, Type[TailCall]] = {
 }
 
 
-@ dataclass(init=False)
+@dataclass(init=False)
 class TailCallable(_FuncStore):
-
     feature_set: FeatureSet
 
     def __init__(self, _func: Callable[..., Any], *, feature_set: Union[FeatureSet, str] = FeatureSet.FULL):
@@ -367,9 +384,9 @@ class TailCallable(_FuncStore):
 
 
 def tail_recursive(
-    _func: Optional[Callable[..., Any]] = None,
-    *,
-    feature_set: Union[FeatureSet, str] = FeatureSet.FULL
+        _func: Optional[Callable[..., Any]] = None,
+        *,
+        feature_set: Union[FeatureSet, str] = FeatureSet.FULL
 ):
     """A decorator that gives your functions the ability to be tail recursive.
 
@@ -403,6 +420,7 @@ def tail_recursive(
     Methods:
         tail_call(*args, **kwargs)
     """
+
     def decorator(func):
         return TailCallable(func, feature_set=feature_set)
 
