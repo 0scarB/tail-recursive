@@ -26,7 +26,7 @@ from dataclasses import dataclass
 import enum
 import functools
 import itertools
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Type, Union
 
 # Dunder methods from https://docs.python.org/3/reference/datamodel.html.
 _NUMERIC_DUNDER_METH_BASE_NAMES: List[str] = [
@@ -394,18 +394,16 @@ class TailCallable(_FuncStore):
 def tail_recursive(
         _func: Optional[Callable[..., Any]] = None,
         *,
-        feature_set: Union[FeatureSet, str] = FeatureSet.FULL
+        feature_set: Union[FeatureSet, Literal["base", "nested_calls", "full"]] = FeatureSet.FULL
 ):
     """A decorator that gives your functions the ability to be tail recursive.
 
     Args:
         feature_set: Defines the feature set available when working with tail calls.
-            If the feature set is set to ``"full"`` or ``FeatureSet.FULL`` then
-            nested tail calls (i.e. ``<function>.tail_call([..., ]<function>.tail_call(...)[, ...])``)
-            and dunder overrides (e.g. ``<function>.tail_call(...).<attribute> + <function>.tail_call(...)[<index>]``)
-            are supported.
-            If the feature set is set to ``"base"`` or ``FeatureSet.FULL`` then the aforementioned
-            is not supported.
+            The "base" feature set only solely provides the `.tail_call` method for returning tail calls.
+            The "nested_calls" feature set allows a `.tail_call` to be passed as an argument to another `.tail_call`
+            The "full" feature set provides method calls, operator overloading
+            and some more magic method functionality on `.tail_call`s
 
     Example::
 
