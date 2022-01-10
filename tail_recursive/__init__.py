@@ -281,7 +281,7 @@ class TailCallWithNestedCallResolution(TailCall):
                     return resolution
 
 
-class TailCallWithDunderOverloads(TailCallBase):
+class TailCallWithNestedCallResolutionAndDunderOverloads(TailCallWithNestedCallResolution):
 
     @staticmethod
     def _tail_call_dunder_meth_factory(dunder_meth_name: str):
@@ -337,25 +337,18 @@ class TailCallWithDunderOverloads(TailCallBase):
         )
 
 
-class TailCallWithNestedCallResolutionAndDunderOverloads(TailCallWithNestedCallResolution, TailCallWithDunderOverloads):
-    pass
-
-
 @enum.unique
 class FeatureSet(enum.IntFlag):
     """Different ways of resolving nested tail calls."""
 
     BASE = 0
-    NESTED_CALLS = 1
-    OVERLOADING = 2
-    FULL = NESTED_CALLS | OVERLOADING
+    NESTED_CALLS = 0b1
+    FULL = 0b11
 
 
 FEATURE_SET_TAILCALL_SUBCLASS_MAP: Dict[FeatureSet, Type[TailCall]] = {
     FeatureSet.BASE: TailCallBase,
     FeatureSet.NESTED_CALLS: TailCallWithNestedCallResolution,
-    FeatureSet.OVERLOADING: TailCallWithDunderOverloads,
-    FeatureSet.NESTED_CALLS | FeatureSet.OVERLOADING: TailCallWithNestedCallResolutionAndDunderOverloads,
     FeatureSet.FULL: TailCallWithNestedCallResolutionAndDunderOverloads,
 }
 

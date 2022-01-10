@@ -8,6 +8,13 @@ import pytest
 from tail_recursive import tail_recursive, FeatureSet
 
 
+ALL_FEATURE_SETS = [
+    FeatureSet.BASE,
+    FeatureSet.NESTED_CALLS,
+    FeatureSet.FULL
+]
+
+
 def non_recursive_factorial(n):
     result = 1
     for coefficient in range(2, n + 1):
@@ -56,81 +63,145 @@ def test_nested_tail_call_mode_raises_exception_for_unknown_feature_set():
         excinfo.value)
 
 
-def test_nested_tail_call_mode_converts_string_to_feature_set():
+@pytest.mark.parametrize("feature_set_str", [feature_set.name.lower() for feature_set in ALL_FEATURE_SETS])
+def test_nested_tail_call_mode_converts_string_to_feature_set(feature_set_str):
 
-    @tail_recursive(feature_set="full")
+    @tail_recursive(feature_set=feature_set_str)
     def _():
         pass
 
-    @tail_recursive(feature_set="base")
-    def _():
-        pass
+
+@pytest.mark.parametrize("feature_set, should_allow_nested_calls", [
+    (FeatureSet.BASE, False),
+    ("base", False),
+    (FeatureSet.NESTED_CALLS, True),
+    ("nested_calls", True),
+    (FeatureSet.BASE | FeatureSet.NESTED_CALLS, True),
+    (FeatureSet.FULL, True),
+    ("full", True),
+    (FeatureSet.BASE | FeatureSet.FULL, True),
+    (FeatureSet.NESTED_CALLS | FeatureSet.FULL, True),
+])
+def test_correct_feature_sets_allow_nested_calls(feature_set, should_allow_nested_calls):
+
+    @tail_recursive(feature_set=feature_set)
+    def func1(is_base_case=False):
+        if type(is_base_case) is not bool:
+            raise ValueError
+        if is_base_case:
+            return True
+        return func1.tail_call(func1.tail_call(True))
+
+    @tail_recursive(feature_set=feature_set)
+    def func2(is_base_case=False):
+        if type(is_base_case) is not bool:
+            raise ValueError
+        if is_base_case:
+            return True
+        return func2.tail_call(func2.tail_call(func2.tail_call(True)))
+
+    for func in (func1, func2):
+        if should_allow_nested_calls:
+            assert func() is True
+        else:
+            with pytest.raises(ValueError):
+                func()
 
 
-def test_factorial_fails_when_max_recursion_depth_is_reached():
-    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
+@pytest.mark.parametrize("feature_set, should_allow_nested_calls", [
+    (FeatureSet.BASE, False),
+    ("base", False),
+    (FeatureSet.NESTED_CALLS, False),
+    ("nested_calls", False),
+    (FeatureSet.BASE | FeatureSet.NESTED_CALLS, False),
+    (FeatureSet.FULL, True),
+    ("full", True),
+    (FeatureSet.BASE | FeatureSet.FULL, True),
+    (FeatureSet.NESTED_CALLS | FeatureSet.FULL, True),
+])
+def test_correct_feature_sets_allow_full(feature_set, should_allow_nested_calls):
 
-        @tail_recursive(feature_set=feature_set)
-        def factorial(n, accumulator=1):
-            if n == 1:
-                return accumulator
-            return factorial(n - 1, n * accumulator)
+    @tail_recursive(feature_set=feature_set)
+    def func1(n):
+        if n == 0:
+            return set()
+        return func1.tail_call(n - 1).union({n})
 
-        assert factorial(1) == non_recursive_factorial(1) == 1
-        assert factorial(3) == non_recursive_factorial(3) == 6
-        assert factorial(4) == non_recursive_factorial(4) == 24
-        assert factorial(6) == non_recursive_factorial(6) == 720
+    @tail_recursive(feature_set=feature_set)
+    def func2(n):
+        if n == 0:
+            return set()
+        return func2.tail_call(n - 1) | {n}
 
-        n = sys.getrecursionlimit() + 1
-        with pytest.raises(RecursionError) as excinfo:
-            factorial(n)
-        assert "maximum recursion depth" in str(excinfo.value)
-
-
-def test_factorial_succeeds_with_tail_recursion():
-    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
-
-        @tail_recursive(feature_set=feature_set)
-        def factorial(n, accumulator=1):
-            if n == 1:
-                return accumulator
-            return factorial.tail_call(n - 1, n * accumulator)
-
-        assert factorial(1) == non_recursive_factorial(1) == 1
-        assert factorial(3) == non_recursive_factorial(3) == 6
-        assert factorial(4) == non_recursive_factorial(4) == 24
-        assert factorial(6) == non_recursive_factorial(6) == 720
-
-        n = sys.getrecursionlimit() + 100
-        assert factorial(n) == non_recursive_factorial(n)
+    for func, expected_error in ((func1, AttributeError), (func2, TypeError)):
+        if should_allow_nested_calls:
+            assert func(5) == {5, 4, 3, 2, 1}
+        else:
+            with pytest.raises(expected_error):
+                func(5)
 
 
-def test_multithreaded_factorial_succeeds_with_tail_recursion():
+@pytest.mark.parametrize("feature_set", ALL_FEATURE_SETS)
+def test_factorial_fails_when_max_recursion_depth_is_reached(feature_set):
+    @tail_recursive(feature_set=feature_set)
+    def factorial(n, accumulator=1):
+        if n == 1:
+            return accumulator
+        return factorial(n - 1, n * accumulator)
+
+    assert factorial(1) == non_recursive_factorial(1) == 1
+    assert factorial(3) == non_recursive_factorial(3) == 6
+    assert factorial(4) == non_recursive_factorial(4) == 24
+    assert factorial(6) == non_recursive_factorial(6) == 720
+
+    n = sys.getrecursionlimit() + 1
+    with pytest.raises(RecursionError) as excinfo:
+        factorial(n)
+    assert "maximum recursion depth" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("feature_set", ALL_FEATURE_SETS)
+def test_factorial_succeeds_with_tail_recursion(feature_set):
+    @tail_recursive(feature_set=feature_set)
+    def factorial(n, accumulator=1):
+        if n == 1:
+            return accumulator
+        return factorial.tail_call(n - 1, n * accumulator)
+
+    assert factorial(1) == non_recursive_factorial(1) == 1
+    assert factorial(3) == non_recursive_factorial(3) == 6
+    assert factorial(4) == non_recursive_factorial(4) == 24
+    assert factorial(6) == non_recursive_factorial(6) == 720
+
+    n = sys.getrecursionlimit() + 100
+    assert factorial(n) == non_recursive_factorial(n)
+
+
+@pytest.mark.parametrize("feature_set", ALL_FEATURE_SETS)
+def test_multithreaded_factorial_succeeds_with_tail_recursion(feature_set):
     """Test for thread safety."""
-    for feature_set in (FeatureSet.FULL, FeatureSet.BASE):
+    @tail_recursive(feature_set=feature_set)
+    def factorial(n, accumulator=1):
+        time.sleep(0.001)
+        if n == 1:
+            return accumulator
+        return factorial.tail_call(n - 1, n * accumulator)
 
-        @tail_recursive(feature_set=feature_set)
-        def factorial(n, accumulator=1):
-            time.sleep(0.001)
-            if n == 1:
-                return accumulator
-            return factorial.tail_call(n - 1, n * accumulator)
-
-        # If there is shared data accross multiple threads then the following
-        # may invoke a race condition.
-        n1 = 100
-        n2 = 6
-        ns = (n2, n1)
-        n_expected_result_map = {n: non_recursive_factorial(n) for n in ns}
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Runs factorial concurrently on different threads for each n of ns.
-            n_factorial_future_map = {
-                n: executor.submit(factorial, n) for n in ns}
-            concurrent.futures.wait(n_factorial_future_map.values())
-            assert n_factorial_future_map[n1].result(
-            ) == n_expected_result_map[n1]
-            assert n_factorial_future_map[n2].result(
-            ) == n_expected_result_map[n2]
+    # If there is shared data accross multiple threads then the following
+    # may invoke a race condition.
+    n1 = 100
+    n2 = 6
+    ns = (n2, n1)
+    n_expected_result_map = {n: non_recursive_factorial(n) for n in ns}
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Runs factorial concurrently on different threads for each n of ns.
+        n_factorial_future_map = {
+            n: executor.submit(factorial, n) for n in ns}
+        concurrent.futures.wait(n_factorial_future_map.values())
+        assert n_factorial_future_map[n1].result(
+        ) == n_expected_result_map[n1]
+        assert n_factorial_future_map[n2].result(
+        ) == n_expected_result_map[n2]
 
 
 def test_multi_function_factorial_fails_with_nested_tail_call_resolution_disabled():

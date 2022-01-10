@@ -49,7 +49,214 @@ def factorial(n):
 factorial(x)
 ```
 
+## Features
+
+### Feature Sets
+
+Three feature sets are currently supported: 
+`FeatureSet.BASE`, `FeatureSet.NESTED_CALLS` and `FeatureSet.FULL`.
+Where the "base" feature set provides a subset of the functionality of the "nested_calls" feature set which provides
+a subset of the "full" functionality. 
+As a result the following python code is valid:
+```python
+from tail_recursive import FeatureSet
+
+assert FeatureSet.FULL == FeatureSet.FULL | FeatureSet.NESTED_CALLS == FeatureSet.FULL | FeatureSet.NESTED_CALLS | FeatureSet.BASE
+```
+
+The default feature set is "full".
+Choosing a feature set with less functionality will provide some performance increase.
+
+The desired feature set can be set be passing a value to the `feature_set` parameter, e.g.:
+```python
+@tail_recursive(feature_set=FeatureSet.NESTED_CALLS)
+def func(...):
+    ...
+```
+You can also pass a lowercase string as a shorthand, e.g.:
+```python
+@tail_recursive(feature_set="nested_calls")
+def func(...):
+    ...
+```
+
+### Nested Calls (`feature_set="nested_calls"/FeatureSet.NESTED_CALLS | "full"/FeatureSet.FULL`)
+
+This feature will resolve tail calls passed as parameters to other tail calls.
+
+```python
+...
+
+@tail_recursive
+def mul(a, b):
+    return a * b
+
+@tail_recursive
+def factorial(n):
+    if n == 1:
+        return n
+    return mul.tail_call(n, factorial.tail_call(n - 1))
+
+...
+```
+
+As mentioned this comes at a performance cost and can be disabled by using the "base" feature set.
+
+### Method Calls (`feature_set="full"/FeatureSet.Full`)
+
+Method calls on tail calls are supported, e.g.:
+```python
+@tail_recursive(feature_set=feature_set)
+def func(n):
+   if n == 0:
+      return set()
+   return func.tail_call(n - 1).union({n})
+```
+
+### Operator Overloading and Dunder Method Overriding (`feature_set="full"/FeatureSet.Full`)
+
+`n * factorial.tail_call(n - 1)` shows that numeric operations
+can be done on tail calls, so long as the result of the expression
+is returned by the function. These expressions will ultimately
+evaluate to the same value that they would have if `tail_call` had been omitted.
+This is also true for comparison and bitwise
+operations, attribute and index access (i.e. `<func>.tail_call(...)[...]`)
+and much more functionality provided by dunder methods.
+
+That being said, attribute assignment (i.e. `<func>.tail_call(...).<attr> = val`)
+and the functionality provided by the following dunder methods are not currently
+supported with `tail_call`.
+
+- `__del__`
+- `__getattribute__`
+- `__setattr__`
+- `__get__`
+- `__set__`
+- `__delete__`
+- `__set_name__`
+- `__init_subclass__`
+- `__prepare__`
+
+Note that also `__init__` and `__new__` cannot be called directly on a tail call
+(e.g. `<func>.tail_call(...).__init__(...)`) and are instead implicitly lazily evaluated
+with the arguments passed to `tail_call` while popping off/unwinding the tail call stack.
+
+Futhermore, dunder methods added after 3.8 and in standard library or third-party packages/modules may also not be supported.
+
+Another important note is that dunder attributes will currently not be lazily evaluated.
+e.g.
+
+- `__doc__`
+- `__name__`
+- `__qualname__`
+- `__module__`
+- `__defaults__`
+- `__defaults__`
+- `__code__`
+- `__globals__`
+- `__dict__`
+- `__closure__`
+- `__annotations__`
+- `__kwdefaults__`
+
+Finally, since `__repr__` and `__str__` are overridden use
+`<func>.tail_call(...)._to_string()` to pretty print tail calls.
+
+## Usage with other Decorators
+
+Especially in recursive algorithms it can significantly increase performance
+to use memoization. In this use case it is best to place the decorator enabling
+memoization after `@tail_recursive`. e.g.
+
+```python
+import functools
+
+@tail_recursive(feature_set="full")
+@functools.lru_cache
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci.tail_call(n - 1) + fibonacci.tail_call(n - 2)
+```
+
+For properties place the `@property` decorator before `@tail_recursive`.
+
+## Current Limitations
+
+### Return Values
+
+Currently, tail calls that are returned as item/member in a tuple or other
+data structures are not evaluated.
+
+The following will not evaluate the tail call.
+
+```python
+from tail_recursive import tail_recursive
+
+@tail_recursive
+def func(...):
+    ...
+    return return_val1, func.tail_call(...)
+```
+
+A workaround is to use factory functions.
+
+```python
+from tail_recursive import tail_recursive
+
+@tail_recursive
+def tuple_factory(*args):
+    return tuple(args)
+
+@tail_recursive
+def func(...):
+    ...
+    return tuple_factory.tail_call(
+        return_val1,
+        func.tail_call(...)
+    )
+```
+
+Or pass the container object's type directly to `tail_recursive`.
+
+```python
+from tail_recursive import tail_recursive
+
+@tail_recursive
+def func(...):
+    ...
+    return tail_recursive(tuple).tail_call((
+        return_val1,
+        func.tail_call(...)
+    ))
+```
+
+### Method Decorators
+
+Currently, when calling `tail_call` on a decorated method, you need to explicitly pass
+self (the current objects instance) as the first argument. e.g.
+
+```python
+class MathStuff:
+
+    @tail_recursive(feature_set="full")
+    def fibonacci(self, n):
+        if n <= 1:
+            return n
+        return self.fibonacci.tail_call(self, n - 1) + self.fibonacci.tail_call(self, n - 2)
+                                        ^^^^                                    ^^^^
+```
+
+
 ### How it works
+
+```python
+@tail_recursive
+def factorial(n):
+    if n <= 1:
+        return n
+    return n * factorial.tail_call(n - 1)
+```
 
 When a function (in this case `factorial`) is decorated by `@tail_recursive`, it returns
 an object implementing the `tail_call` method. This object also overrides the `__call__`
@@ -150,191 +357,6 @@ The call stack for `factorial(3)` would looks something like this.
 
 ```python
 []
-```
-
-## Features
-
-### Nested Tail Calls
-
-(only works for `feature_set="full"|FeatureSet.FULL`)
-
-As mentioned above nested tail calls are sequentially evaluated by creating a call stack.
-
-```python
-...
-
-@tail_recursive
-def mul(a, b):
-    return a * b
-
-@tail_recursive
-def factorial(n):
-    if n == 1:
-        return n
-    return mul.tail_call(n, factorial.tail_call(n - 1))
-
-...
-```
-
-Nested calls, however, comes a performance cost and can be disabled as follows.
-
-```python
-@tail_recursive(feature_set="base")
-def factorial(n, accumulator=1):
-    if n == 1:
-        return accumulator
-    return factorial.tail_call(n - 1, n * accumulator)
-```
-
-or
-
-```python
-from tail_recursive import tail_recursive, FeatureSet
-
-...
-
-@tail_recursive(nested_call_mode=FeatureSet.BASE)
-def factorial(n, accumulator=1):
-    ...
-```
-
-Similarly, use `feature_set="full"` or `feature_set=FeatureSet.FULL`
-to explicitly enable this feature.
-
-### Dunder Method Overrides
-
-(only works for `feature_set="full"|FeatureSet.FULL`)
-
-`n * factorial.tail_call(n - 1)` shows that numeric operations
-can be done on tail calls and so long as the result of the expression
-is returned by the function. These expression will ultimately
-evaluate to the same value that they would have if `tail_call` had been omitted.
-This is also true for comparison and bitwise
-operations, attribute and index access (i.e. `<func>.tail_call(...)[...]`)
-and much more functionality provided by dunder methods.
-
-That being said, attribute assignment (i.e. `<func>.tail_call(...).<attr> = val`)
-and the functionality provided by the following dunder methods are not currently
-supported with `tail_call`.
-
-- `__del__`
-- `__getattribute__`
-- `__setattr__`
-- `__get__`
-- `__set__`
-- `__delete__`
-- `__set_name__`
-- `__init_subclass__`
-- `__prepare__`
-
-Note that also `__init__` and `__new__` cannot be called directly on a tail call
-(e.g. `<func>.tail_call(...).__init__(...)`) and are instead implicitly lazily evaluated
-with the arguments passed to `tail_call` while popping off/unwinding the tail call stack.
-
-Futhermore, dunder methods added after 3.8 and in standard library or third-party packages/modules may also not be supported.
-
-Another important note is that dunder attributes will currently not be lazily evaluated.
-e.g.
-
-- `__doc__`
-- `__name__`
-- `__qualname__`
-- `__module__`
-- `__defaults__`
-- `__defaults__`
-- `__code__`
-- `__globals__`
-- `__dict__`
-- `__closure__`
-- `__annotations__`
-- `__kwdefaults__`
-
-Finally, since `__repr__` and `__str__` are overridden use
-`<func>.tail_call(...)._to_string()` to pretty print tail calls.
-
-## Usage with other Decorators
-
-Especially in recursive algorithms it can significantly increase performance
-to use memoization. In this use case it is best to place the decorator enabling
-memoization after `@tail_recursive`. e.g.
-
-```python
-import functools
-
-@tail_recursive(feature_set="full")
-@functools.lru_cache
-def fibonacci(n):
-    if n <= 1:
-        return n
-    return fibonacci.tail_call(n - 1) + fibonacci.tail_call(n - 2)
-```
-
-For properties place the `@property` decorator before `@tail_recursive`.
-
-## Current Limitations
-
-### Return Values
-
-Currently tail calls that are returned as item/member in a tuple or other
-data structures are not evaluated.
-
-The following will not evaluate the tail call.
-
-```python
-from tail_recursive import tail_recursive
-
-@tail_recursive
-def func(...):
-    ...
-    return return_val1, func.tail_call(...)
-```
-
-A workaround is to use factory functions.
-
-```python
-from tail_recursive import tail_recursive
-
-@tail_recursive
-def tuple_factory(*args):
-    return tuple(args)
-
-@tail_recursive
-def func(...):
-    ...
-    return tuple_factory.tail_call(
-        return_val1,
-        func.tail_call(...)
-    )
-```
-
-Or pass the container object's type directly to `tail_recursive`.
-
-```python
-from tail_recursive import tail_recursive
-
-@tail_recursive
-def func(...):
-    ...
-    return tail_recursive(tuple).tail_call((
-        return_val1,
-        func.tail_call(...)
-    ))
-```
-
-### Method Decorators
-
-Currently, when calling `tail_call` on a decorated method, you need to explicitly pass
-self (the current objects instance) as the first argument. e.g.
-
-```python
-class MathStuff:
-
-    @tail_recursive(feature_set="full")
-    def fibonacci(self, n):
-        if n <= 1:
-            return n
-        return self.fibonacci.tail_call(self, n - 1) + self.fibonacci.tail_call(self, n - 2)
-                                        ^^^^                                    ^^^^
 ```
 
 ## Other Packages
