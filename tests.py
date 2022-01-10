@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import concurrent.futures
 import sys
 import time
@@ -363,13 +364,13 @@ def test_tail_call_as_part_for_datastructure_with_factory_succeeds():
 def test_tail_call_with_dataclass_succeeds():
     from dataclasses import dataclass
 
-    @ tail_recursive
-    @ dataclass
+    @tail_recursive
+    @dataclass
     class SquareAndTriangularNumber:
         square: int
         triangular: int = 1
 
-    @ tail_recursive(feature_set="full")
+    @tail_recursive(feature_set="full")
     def square_and_triangular_numbers(n):
         square_and_triangular_number = SquareAndTriangularNumber.tail_call(
             square=n**2,
@@ -410,3 +411,94 @@ def test_class_property():
 
     n = sys.getrecursionlimit() + 1
     assert MathStuff(n).fib_of_n == non_recursive_fibonacci(n)
+
+
+def test_lst_concatenation_succeeds_for_arbitrary_operator_order():
+    # Test that this works using python's standard recursion
+    def non_tail_recursive_func1(is_base_case=False):
+        if is_base_case:
+            return [1]
+        return non_tail_recursive_func1(True) + [2]
+
+    @tail_recursive
+    def func1(is_base_case=False):
+        if is_base_case:
+            return [1]
+        return func1.tail_call(True) + [2]
+
+    # Test that this works using python's standard recursion
+    def non_tail_recursive_func2(is_base_case=False):
+        if is_base_case:
+            return [2]
+        return [1] + non_tail_recursive_func2(True)
+
+    @tail_recursive
+    def func2(is_base_case=False):
+        if is_base_case:
+            return [2]
+        return [1] + func2.tail_call(True)
+
+    for func, description in (
+            (non_tail_recursive_func1, "Standard python `<recursive function returning list>(...) + <list>`"),
+            (func1, "Tail recursive `<recursive function returning list>.tail_call(...) + <list>`"),
+            (non_tail_recursive_func2, "Standard python `<list> + <recursive function returning list>(...)`"),
+            (func2, "Tail recursive `<list> + <recursive function returning list>.tail_call(...)`")
+    ):
+        try:
+            assert func() == [1, 2], f"{description} is incorrect"
+        except Exception as err:
+            return pytest.fail(f"{description} failed with error {err}")
+
+
+def test_reverse_succeeds_with_operator_overloading():
+    def non_tail_recursive_reverse(lst):
+        """Standard python recursive reverse function"""
+        if len(lst) <= 1:
+            return lst
+
+        start, *middle, end = lst
+        return [end] + non_tail_recursive_reverse(middle) + [start]
+
+    @tail_recursive
+    def reverse(lst):
+        """Tail recursive reverse function"""
+        if len(lst) <= 1:
+            return lst
+
+        start, *middle, end = lst
+        return [end] + reverse.tail_call(middle) + [start]
+
+    with set_max_recursion_depth(100):
+        for n, expect_non_tail_recursive_fails_with_err in (
+                (10, None),
+                (1000, RecursionError),
+        ):
+            lst = list(range(n))
+            expected_result = list(reversed(lst))
+
+            try:
+                print(expect_non_tail_recursive_fails_with_err)
+                assert non_tail_recursive_reverse(lst) == expected_result, \
+                    f"{non_tail_recursive_reverse.__doc__} is incorrect"
+
+                if expect_non_tail_recursive_fails_with_err is not None:
+                    pytest.fail(
+                        f"{non_tail_recursive_reverse.__doc__} was expected to fail "
+                        f"with error '{expect_non_tail_recursive_fails_with_err.__qualname__}'"
+                    )
+            except Exception as err:
+                if not isinstance(err, expect_non_tail_recursive_fails_with_err):
+                    pytest.fail(f"{non_tail_recursive_reverse.__doc__} unexpectedly failed with error {err}")
+
+            try:
+                assert reverse(lst) == expected_result, f"{reverse.__doc__} is incorrect"
+            except Exception as err:
+                pytest.fail(f"{reverse.__doc__} failed with error {err}")
+
+
+@contextmanager
+def set_max_recursion_depth(depth):
+    original_depth = sys.getrecursionlimit()
+    sys.setrecursionlimit(depth)
+    yield
+    sys.setrecursionlimit(original_depth)
